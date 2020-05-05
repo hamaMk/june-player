@@ -4,7 +4,7 @@ import os
 import sys
 import vlc
 from urllib.parse import urlparse, unquote
-from models import Track, Playlist, PlaylistModel
+from models import PlaylistModel
 import time
 import datetime
 
@@ -27,27 +27,17 @@ class Home(QtWidgets.QMainWindow):
          # Create a basic vlc instance
         self.instance = vlc.Instance('--novideo')
 
+
+        self.model = PlaylistModel()
+
+
+        self.media_list = self.instance.media_list_new()
         
-
-        self.playlist = Playlist()
-
-        self.model = PlaylistModel(todos=[(False, 'an item'), (False, 'another item')])
-
-        m = [
-            'fly.mp3',
-            'into.mp3',
-            'face.mp3',
-            
-        ]
-        mlist = self.instance.media_list_new(m)
-        # self.player = self.instance.media_player_new()
-        # self.player.set_media(mlist.media())
 
         self.list_player = self.instance.media_list_player_new()
-        self.list_player.set_media_list(mlist)
+        self.list_player.set_media_list(self.media_list)
         
-        self.list_player.next()
-        self.list_player.play()
+
         self.player = self.list_player.get_media_player()
         
 
@@ -71,6 +61,8 @@ class Home(QtWidgets.QMainWindow):
 
         # event manager
         self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self.track_finished)
+        self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPlaying, self.track_playing)
+        # self.player.event_manager().event_attach(vlc.EventType.MediaListItemDeleted, self.track_finished)
 
         self.menuBar = self.findChild(QtWidgets.QMenuBar, 'menuBar')
         self.menuFile = self.findChild(QtWidgets.QMenu, 'menuFile')
@@ -82,8 +74,9 @@ class Home(QtWidgets.QMainWindow):
         self.list_view.setModel(self.model)
         
 
-        btnPlayPause = self.findChild(QtWidgets.QPushButton, 'btnPlayPause')
+        self.btn_play_pause = self.findChild(QtWidgets.QPushButton, 'btnPlayPause')
         self.btnPlayPause.clicked.connect(self.play_pause)
+        self.btn_play_pause.setText("Play")
 
         self.btn_prev = self.findChild(QtWidgets.QPushButton, 'btnPrev')
         self.btn_prev.clicked.connect(self.prev)
@@ -91,7 +84,7 @@ class Home(QtWidgets.QMainWindow):
         self.btn_next = self.findChild(QtWidgets.QPushButton, 'btnNext')
         self.btn_next.clicked.connect(self.skip)
 
-        volumeSlider = self.findChild(QtWidgets.QSlider, 'volumeSlider')
+        self.volumeSlider = self.findChild(QtWidgets.QSlider, 'volumeSlider')
         self.volumeSlider.setValue(self.player.audio_get_volume())
         self.volumeSlider.sliderMoved.connect(self.volumeAdjust)
 
@@ -111,24 +104,15 @@ class Home(QtWidgets.QMainWindow):
         return duration
 
     def play_track(self):
-        track = self.playlist.get()
-        self.player.set_mrl(track.path)
-        self.player.play()
-        self.timer.start()
-        self.is_paused = False
+        pass
 
     def track_finished(self, event):
         print('done playback')
-        if self.playlist.has_next():
-            track = self.playlist.next()
-            self.player.set_mrl(track.path)
-            self.player.play()
-            self.timer.start()
-            self.is_paused = False
-        else:
-            self._player.set_position(1)
-            self._fire_event(self.Events.FINISHED)
-            self.__update_clients()
+        self.positionslider.setValue(0)
+
+    def track_playing(self, event):
+        self.btn_play_pause.setText('Pause')
+       
 
 
     def dragEnterEvent(self, e):
@@ -139,18 +123,11 @@ class Home(QtWidgets.QMainWindow):
     
     def dropEvent(self, e):
         # self.setText(e.mimeData().text())
-        media_file = e.mimeData().text()
-        media_file = unquote(urlparse(media_file).path)
-        print(media_file)
-        self.player.set_mrl(media_file)
-        self.player.play()
-        self.timer.start()
-        self.is_paused = False
-
-        
-
-        # event = self.player.event_manager()
-        # event.event_attach(vlc.EventType.MediaPlayerTimeChanged , self.timeChanged)
+        track = e.mimeData().text()
+        track = unquote(urlparse(track).path)
+        print(track)
+        self.add_to_list(track)
+            
 
     def action_open(self):
         self.openFileNamesDialog()
@@ -158,20 +135,17 @@ class Home(QtWidgets.QMainWindow):
     def play_pause(self):
         """Toggle play/pause status
         """
-        if self.player.is_playing():
-            self.player.pause()
-            # self.playbutton.setText("Play")
+        if self.list_player.is_playing():
+            self.list_player.pause()
+            self.btn_play_pause.setText("Play")
             self.is_paused = True
             self.timer.stop()
         else:
-            if self.player.play() == -1:
-                if self.playlist.has_next():
-                    self.play_track()
-                else:
-                    self.openFileNamesDialog()
+            if self.list_player.play() == -1:
+                self.openFileNamesDialog()
                 return
-            self.player.play()
-            # self.playbutton.setText("Pause")
+            self.list_player.play()
+            self.btn_play_pause.setText("Pause")
             self.timer.start()
             self.is_paused = False
 
@@ -211,7 +185,7 @@ class Home(QtWidgets.QMainWindow):
         media_pos = int(self.player.get_position() * 1000)
         self.positionslider.setValue(media_pos)
  
-         # No need to call this function if nothing is played
+        # No need to call this function if nothing is played
         if not self.player.is_playing():
             self.timer.stop()
  
@@ -220,6 +194,8 @@ class Home(QtWidgets.QMainWindow):
             # This fixes that "bug".
             # if  not self.is_paused:
             #     self.stop()
+            self.positionslider.setValue(0)
+            self.btn_play_pause.setText('Play')
 
     def toggle_mute(self):
         is_mute = self.player.audio_get_mute()
@@ -242,8 +218,7 @@ class Home(QtWidgets.QMainWindow):
         files, _ = QFileDialog.getOpenFileNames(self,"QFileDialog.getOpenFileNames()", "","All Files (*);;Mp3 Files (*.mp3);; Flac Files (*.flac)", options=options)
         if files:
             for f in files:
-                track = Track(path=f)
-                self.playlist.add(track=track)
+                self.add_to_list(f)
     
     def saveFileDialog(self):
         options = QFileDialog.Options()
@@ -253,6 +228,14 @@ class Home(QtWidgets.QMainWindow):
             print(fileName)
 
 
+    # add track to playlist and to display model
+    def add_to_list(self, path):
+        media = self.instance.media_new(path)
+        self.media_list.add_media(media)
+        media.parse()
+        name = media.get_meta(0)
+        self.model.tracks.append(name)
+        self.model.layoutChanged.emit()
     
 
 if __name__ == '__main__':
