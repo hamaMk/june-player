@@ -96,7 +96,7 @@ class Home(QtWidgets.QMainWindow):
         self.show()
 
     def list_double_clicked(self, index):
-        print('selected # ' + index)
+        self.list_player.play_item_at_index(index.row())
 
     def duration(self, ms):
         seconds = ms/1000
@@ -108,10 +108,12 @@ class Home(QtWidgets.QMainWindow):
 
     def track_finished(self, event):
         print('done playback')
-        self.positionslider.setValue(0)
+    
 
     def track_playing(self, event):
         self.btn_play_pause.setText('Pause')
+        # highlight currently playing track in playlist view
+
        
 
 
@@ -122,15 +124,23 @@ class Home(QtWidgets.QMainWindow):
             e.ignore()
     
     def dropEvent(self, e):
-        # self.setText(e.mimeData().text())
-        track = e.mimeData().text()
-        track = unquote(urlparse(track).path)
-        print(track)
-        self.add_to_list(track)
+        tracks = e.mimeData().urls()
+        for track in tracks:
+            track = track.toDisplayString()
+            self.add_to_list(track)
+        if not self.list_player.is_playing():
+            self.list_player.play()
             
 
     def action_open(self):
         self.openFileNamesDialog()
+
+    def play(self):
+        self.list_player.play()
+        self.btn_play_pause.setText("Pause")
+        self.timer.start()
+        self.is_paused = False
+
 
     def play_pause(self):
         """Toggle play/pause status
@@ -144,10 +154,7 @@ class Home(QtWidgets.QMainWindow):
             if self.list_player.play() == -1:
                 self.openFileNamesDialog()
                 return
-            self.list_player.play()
-            self.btn_play_pause.setText("Pause")
-            self.timer.start()
-            self.is_paused = False
+            self.play()
 
 
     def prev(self):
