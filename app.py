@@ -129,7 +129,7 @@ class Home(QtWidgets.QMainWindow):
             track = track.toDisplayString()
             self.add_to_list(track)
         if not self.list_player.is_playing():
-            self.list_player.play()
+            self.play()
             
 
     def action_open(self):
