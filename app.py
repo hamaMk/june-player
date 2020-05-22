@@ -9,10 +9,12 @@ import time
 import datetime
 import pwd
 from tools.database import JDB
-from tools import discover, make_spectrogram
+from tools import discover, make_spectrogram, constants
 import logging
 from tools.imagecluster import calc, io as icio, postproc
 import uuid
+import faster_than_walk as ftw
+
 
 # logging conf
 logging.basicConfig(level=logging.DEBUG)    
@@ -322,13 +324,18 @@ class Home(QtWidgets.QMainWindow):
 
     # add track to playlist and to display model
     def add_to_list(self, path):
+        path = path.replace("file://", "")
+        tracks = ftw.walk(path, constants.extensions)
+        for track in tracks:
+            self.add(track)
+
+    def add(self, path):
         media = self.instance.media_new(path)
         self.media_list.add_media(media)
         media.parse()
         name = media.get_meta(0)
         self.model.tracks.append(name)
         self.model.layoutChanged.emit()
-    
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
