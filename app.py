@@ -7,6 +7,21 @@ from urllib.parse import urlparse, unquote
 from models import PlaylistModel
 import time
 import datetime
+import pwd
+from tools.database import JDB
+from tools import discover, make_spectrogram
+import logging
+from tools.imagecluster import calc, io as icio, postproc
+import uuid
+
+# logging conf
+logging.basicConfig(level=logging.DEBUG)    
+
+# sqlite database instance
+db = JDB()
+
+def get_username():
+    return pwd.getpwuid( os.getuid() )[ 0 ]
 
 # playback options
 default = vlc.PlaybackMode.default
@@ -15,6 +30,16 @@ repeat = vlc.PlaybackMode.repeat
 options = [
     repeat
 ]
+
+
+class SmartPList():
+    def __init__(self):
+        pass
+        # discover 
+        # make spectrograms 
+        # make clusters and save
+
+    
 
 
 
@@ -47,32 +72,28 @@ class Home(QtWidgets.QMainWindow):
         self.timer.setInterval(100)
         self.timer.timeout.connect(self.update_ui)
 
-
-        # self.media = self.instance.media_new('fly.mp3')
-        #  # Put the media in the media player
-        # self.player.set_media(self.media)
-        # # Parse the metadata of the file
-        # self.media.parse()
-        # print(self.media.get_meta(0))
-        # d = self.media.get_duration()
-        
-        # print(self.duration(d))
-        
+        self.playlist_showing = False
 
         # event manager
         self.player.event_manager().event_attach(vlc.EventType.MediaPlayerEndReached, self.track_finished)
         self.player.event_manager().event_attach(vlc.EventType.MediaPlayerPlaying, self.track_playing)
+
         # self.player.event_manager().event_attach(vlc.EventType.MediaListItemDeleted, self.track_finished)
 
         self.menuBar = self.findChild(QtWidgets.QMenuBar, 'menuBar')
         self.menuFile = self.findChild(QtWidgets.QMenu, 'menuFile')
         self.actionOpen = self.findChild(QtWidgets.QAction, 'actionOpen')
         self.actionOpen.triggered.connect(self.action_open)
+        self.actionSmartPList = self.findChild(QtWidgets.QAction, 'actionSmartPList')
+        self.actionSmartPList.triggered.connect(self.start_smart_playlist)
 
         self.list_view = self.findChild(QtWidgets.QListView, 'listView')
         self.list_view.doubleClicked.connect(self.list_double_clicked)
         self.list_view.setModel(self.model)
-        
+        self.list_view.hide()
+
+        self.btn_show_plist = self.findChild(QtWidgets.QPushButton, 'btnShowPList')
+        self.btn_show_plist.clicked.connect(self.show_playlist)
 
         self.btn_play_pause = self.findChild(QtWidgets.QPushButton, 'btnPlayPause')
         self.btnPlayPause.clicked.connect(self.play_pause)
@@ -88,12 +109,69 @@ class Home(QtWidgets.QMainWindow):
         self.volumeSlider.setValue(self.player.audio_get_volume())
         self.volumeSlider.sliderMoved.connect(self.volumeAdjust)
 
+        self.lbl_duration = self.findChild(QtWidgets.QLabel, 'lblDuration')
+
         self.positionslider = self.findChild(QtWidgets.QSlider, 'positionSlider')
         self.positionslider.setMaximum(1000)
         self.positionslider.sliderMoved.connect(self.set_position)
         self.positionslider.sliderPressed.connect(self.set_position)
 
         self.show()
+
+    def show_playlist(self):
+        view = self.list_view
+        if self.playlist_showing:
+            view.hide()
+            self.playlist_showing = False
+        else:
+            view.show()
+            self.playlist_showing = True
+
+    def start_smart_playlist(self):
+        tracks = discover.search()
+        logging.debug('Found: ' + str(len(tracks)) + ' tracks in library')
+        db.addTracks(tracks)
+        logging.debug('Done disovery')
+
+        # logging.debug('Making spectrograms ...')
+        # files = db.getTracks()
+        # logging.debug('Found: {}'.format(str(len(files))))
+        # logging.debug(type(files[0].path))
+        # for t in range(0, len(files)):
+        #     make_spectrogram.audio_to_spectrogram(files[t].id, files[t].path)
+        #     logging.debug('Done '.format(str(t)))
+        # logging.debug('Done spectrograms')
+
+        self.make_cluster()
+
+
+
+    def make_cluster(self):
+        logging.debug('Clustering files ...')
+        images,fingerprints,timestamps = icio.get_image_data('/home/hama/Documents/projects/playr/data/spectrograms')
+        # logging.debug('Sub-clusters found: {} {}'.format(images, fingerprints))
+        if images == None or fingerprints == None:
+            logging.error('No spectrograms found')
+            return
+        clusters = calc.cluster(fingerprints, sim=0.5)
+
+        for csize, group in clusters.items():
+            logging.debug('Sub-clusters found: '.format(csize))
+            for iclus, cluster in enumerate(group):
+                cluster_name = str(uuid.uuid4())
+                # for track in cluster:
+                db.saveClusters(cluster_name, cluster)
+
+        logging.debug('Clustering completed')
+
+
+
+    def save_discovered(self, files):
+        saved_tracks = db.getTracks()
+        # save only files that are not already saved
+        tracks = list(set(files).difference(set(saved_tracks)))
+        print('Found: ' + str(len(tracks)) + ' tracks in library')
+        db.addTracks(tracks)
 
     def list_double_clicked(self, index):
         self.list_player.play_item_at_index(index.row())
@@ -113,6 +191,11 @@ class Home(QtWidgets.QMainWindow):
     def track_playing(self, event):
         self.btn_play_pause.setText('Pause')
         # highlight currently playing track in playlist view
+        self.list_view
+
+        # set duration
+        duration = self.duration(self.list_player.get_media_player().get_media().get_duration())
+        self.lbl_duration.setText(duration)
 
        
 
@@ -222,7 +305,9 @@ class Home(QtWidgets.QMainWindow):
     def openFileNamesDialog(self):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
-        files, _ = QFileDialog.getOpenFileNames(self,"QFileDialog.getOpenFileNames()", "","All Files (*);;Mp3 Files (*.mp3);; Flac Files (*.flac)", options=options)
+        dialog = QFileDialog
+        default_dir = '/home/{0}/Music'.format(get_username())
+        files, _ = QFileDialog.getOpenFileNames(self,"QFileDialog.getOpenFileNames()", default_dir,"All Files (*);;Mp3 Files (*.mp3);; Flac Files (*.flac)", options=options)
         if files:
             for f in files:
                 self.add_to_list(f)
