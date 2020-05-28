@@ -32,11 +32,11 @@ class ClusterTrack(Base):
     __tablename__ = 'cluster_tracks'
 
     id = Column(Integer, primary_key=True)
+    cluster_name = Column(String)
     track_id = Column(Integer, ForeignKey('tracks.id'))
-    cluster_id = Column(Integer, ForeignKey('clusters.id'))
 
     def __repr__(self):
-        return '{} : {}'.format(track_id, cluster_id)
+        return '{} : {}'.format(cluster_name, track_id)
 
 
 class Favourite(Base):
@@ -104,15 +104,11 @@ class JDB:
 
     def saveClusters(self, name, tracks):
         try:
-            cluster_id = self.getClusterId(name)
-            if cluster_id == None:
-                cluster_id = self.addCluster(name)
-            logging.debug('Cluster id: '.format(str(cluster_id)))
             for track in tracks:
                 path, filename = os.path.split(track)
                 track_id, ext = os.path.splitext(filename) 
                 logging.debug(track_id)
-                ct = ClusterTrack(cluster_id=cluster_id, track_id=track_id)
+                ct = ClusterTrack(cluster_name=name, track_id=int(track_id))
                 self.session.add(ct)
             self.session.commit()
         except:

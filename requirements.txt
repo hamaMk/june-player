@@ -1,2 +1,11 @@
 PyQt5==5.14.2
 python-vlc==3.0.9113 
+faster-than-walk==0.9.1
+numpy
+tensorflow==1.5
+keras==2.2.5
+Pillow
+scikit-learn
+matplotlib
+piexif
+# imagecluster==0.4.0

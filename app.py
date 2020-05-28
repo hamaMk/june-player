@@ -195,6 +195,7 @@ class Home(QtWidgets.QMainWindow):
         # highlight currently playing track in playlist view
         self.list_view
 
+
         # set duration
         duration = self.duration(self.list_player.get_media_player().get_media().get_duration())
         self.lbl_duration.setText(duration)
@@ -203,6 +204,7 @@ class Home(QtWidgets.QMainWindow):
 
 
     def dragEnterEvent(self, e):
+        # fix me !!! create custom mimedata to handle file paths properly
         if e.mimeData().hasFormat('text/uri-list'):
             e.accept()
         else:
@@ -214,6 +216,7 @@ class Home(QtWidgets.QMainWindow):
             track = track.toDisplayString()
             self.add_to_list(track)
         if not self.list_player.is_playing():
+            self.player.audio_set_volume(30)
             self.play()
             
 
@@ -325,9 +328,13 @@ class Home(QtWidgets.QMainWindow):
     # add track to playlist and to display model
     def add_to_list(self, path):
         path = path.replace("file://", "")
-        tracks = ftw.walk(path, constants.extensions)
-        for track in tracks:
-            self.add(track)
+        # check if the path if the path is a file or a directory
+        if os.path.isdir(path):
+            tracks = ftw.walk(path, constants.extensions)
+            for track in tracks:
+                self.add(track)
+        else:
+            self.add(path)
 
     def add(self, path):
         media = self.instance.media_new(path)
