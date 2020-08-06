@@ -6,9 +6,6 @@ The june-player uses a deep learning model to group your songs into several grou
 ### Why
 During playback, if you stumble upon a song you like simply activate the ai playlist on the song and the following songs will be in the same group as the one you like and may sound somewhat similar.
 
-Also because it's fun and i can.
-
-
 
 ## Platform Support
 This program was built and tested on linux.
